@@ -255,6 +255,11 @@ class NiconicoIE(InfoExtractor):
                 }
             }).encode())
 
+        # get heart-beat data
+        api_url = session_api_endpoint['url'] + '/' + session_response['data']['session']['id'] + '?_format=json&_method=PUT'
+        data = json.dumps(session_response['data'])
+
+
         resolution = video_quality.get('resolution', {})
 
         return {
@@ -265,6 +270,8 @@ class NiconicoIE(InfoExtractor):
             'vbr': float_or_none(video_quality.get('bitrate'), 1000),
             'height': resolution.get('height'),
             'width': resolution.get('width'),
+            'heartbeat_url': api_url,  # pay attention here
+            'heartbeat_data': data,
         }
 
     def _real_extract(self, url):
@@ -494,7 +501,7 @@ class NicovideoIE(SearchInfoExtractor):
             # is a guarantee that the number of pages in the search results will not exceed 50. For any given search for a day, we extract everything available, and move on, until
             # finding as many entries as were requested.
             currDate -= datetime.timedelta(days=1)
-            if(len(entries) >= n or currDate < datetime.datetime(2007, 1, 1)):
+            if(len(entries) >= n or currDate < datetime.date(2007, 1, 1)):
                 break
 
         return {
