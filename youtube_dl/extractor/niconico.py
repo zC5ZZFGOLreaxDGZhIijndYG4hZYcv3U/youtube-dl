@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 import json
 import datetime
 import re
+import os
 
 from .common import InfoExtractor, SearchInfoExtractor
 from ..compat import (
@@ -483,26 +484,46 @@ class NicovideoIE(SearchInfoExtractor):
     IE_DESC = 'Nico video search'
     _MAX_RESULTS = 100000
     _SEARCH_KEY = 'nicosearch'
-
     def _get_n_results(self, query, n):
         """Get a specified number of results for a query"""
         entries = []
         currDate = datetime.datetime.now().date()
 
-        while True:
-            search_url = "http://www.nicovideo.jp/search/%s?sort=f&order=d" % (query)
-            r = self._get_entries_for_date(search_url, query, currDate)
+        #I only need the last line. I could use seek... but I won't. Will fix later, maybe.
+        if(os.path.exists('storage/date-%s.txt' % query)):
+            with open('storage/date-%s.txt' % query, 'r+') as lines:
+                for line in lines:
+                    a = line.split('-')
+                    currDate = datetime.date(int(a[0]), int(a[1]), int(a[2]))
 
-            # did we gather more entries in the last few pages than were asked for? If so, only add as many as are needed to reach the desired number.
-            m = n - len(entries)
-            entries += r[0:min(m, len(r))]
+        search_url = "http://www.nicovideo.jp/search/%s?sort=f&order=d" % (query)
+
+        #always check the current date to see if there's anything new. Otherwise, go out to cache.
+        todaysEntries = self._get_entries_for_date(search_url, query, datetime.datetime.now().date())
+        entries += todaysEntries[0:min(n, len(todaysEntries))]
+
+        if(os.path.exists('storage/%s.txt' % query)):
+            with open('storage/%s.txt' % query, 'r+') as lines:
+                for line in lines:
+                    if(len(entries) < n):
+                        entries += [self.url_result("http://www.nicovideo.jp/watch/" + str(line)[:-1], 'Niconico')]
+                
+        while True:
+            if(len(entries) >= n or currDate < datetime.date(2007, 1, 1)):
+                break
+
+
 
             # for a given search, nicovideo will show a maximum of 50 pages. My way around this is specifying a date for the search, down to the date, which for the most part
             # is a guarantee that the number of pages in the search results will not exceed 50. For any given search for a day, we extract everything available, and move on, until
             # finding as many entries as were requested.
             currDate -= datetime.timedelta(days=1)
-            if(len(entries) >= n or currDate < datetime.date(2007, 1, 1)):
-                break
+            
+            r = self._get_entries_for_date(search_url, query, currDate)
+
+            # did we gather more entries in the last few pages than were asked for? If so, only add as many as are needed to reach the desired number.
+            m = n - len(entries)
+            entries += r[0:min(m, len(r))]
 
         return {
             '_type': 'playlist',
@@ -524,4 +545,12 @@ class NicovideoIE(SearchInfoExtractor):
         # it's possible there may be another, so we can check. It's a little awkward, but it works.
         if(len(r) >= 32):
             entries += self._get_entries_for_date(url, query, date, pageNumber + 1)
+        #write entries to file
+        if(pageNumber == 1 and date != datetime.datetime.now().date()):
+            file = open('storage/%s.txt' % query, 'a+')
+            for item in entries:
+                #lmao
+                file.write(str(item['url'].split("/")[-1]) + '\n')
+            datefile=open('storage/date-%s.txt' % query, 'a+')
+            datefile.write(str(date) + '\n')
         return entries
